@@ -42,6 +42,8 @@ deployment:
     nic: enp2s0f0
     # CIDR of OpenStack external network - arbitrary but must not be in use
     cidr: 10.20.19.0/24
+    # Default Gateway for the external netowork
+    gateway: 10.20.19.1   
     # Start of IP allocation range for external network
     start: 10.20.19.60
     # End of IP allocation range for external network
