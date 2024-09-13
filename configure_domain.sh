@@ -46,4 +46,9 @@ openstack role add --project "$PROJECT_ID" --user "$USER_ID" "$ROLE_ID"
 
 echo "Role assignment complete."
 echo
+echo "Setting network Names"
+openstack network set --name weaver-network demo-network
+openstack router set --name weaver-router demo-router
+echo "Completed.."
+echo
 echo "Domain configuration completed."
