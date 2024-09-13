@@ -3,8 +3,8 @@
 set -e
 
 # Step 1: Install OpenStack using Snap
-echo "Installing OpenStack from the 2024.1/edge channel..."
-sudo snap install openstack --channel 2024.1/edge
+echo "Installing OpenStack from the 2024.1/beta channel..."
+sudo snap install openstack --channel 2024.1/beta
 
 # Step 2: Wait for the installation to complete
 echo "Waiting for the OpenStack installation to complete..."
