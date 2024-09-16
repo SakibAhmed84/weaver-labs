@@ -1,54 +1,87 @@
 #!/bin/bash
+
 # Exit on any error
 set -e
 
-# Step 7: Configure Domain
-echo "Configuring the base Domain.."
+sudo snap install yq -y
 
-sunbeam openrc > adminrc
-source adminrc
+# Path to the YAML file
+YAML_FILE="openstack.yaml"
 
-openstack domain set --name weaver --description "Weaver Labs Domain" --enable users
-openstack project create --domain weaver --description "Weaver Labs Project" weaver
-openstack user create --domain weaver --password toor9999 weaver
+# Read the external cidr value from the YAML file using yq
+EXTERNAL_IP_SUBNET=$(yq e '.external_network.cidr' "$YAML_FILE")
 
-# Variables for the domain, project, and role
-USER_NAME="weaver"
-DOMAIN_NAME="weaver"
-PROJECT_NAME="weaver"
-ROLE_NAME="admin"
-
-# Check if openstack CLI is installed
-if ! command -v openstack &> /dev/null; then
-    echo "OpenStack CLI is not installed. Please install it before running this script."
+# Check if EXTERNAL_IP_SUBNET is empty
+if [ -z "$EXTERNAL_IP_SUBNET" ]; then
+    echo "CIDR value is missing in $YAML_FILE"
     exit 1
 fi
 
-# Get IDs for the domain, project, user, and role
-DOMAIN_ID=$(openstack domain list -f value -c ID -c Name | grep "$DOMAIN_NAME" | awk '{print $1}')
-PROJECT_ID=$(openstack project list -f value -c ID -c Name | grep "$PROJECT_NAME" | awk '{print $1}')
-USER_ID=$(openstack user list --domain "$DOMAIN_NAME" -f value -c ID -c Name | grep "$USER_NAME" | awk '{print $1}')
-ROLE_ID=$(openstack role list -f value -c ID -c Name | grep "$ROLE_NAME" | awk '{print $1}')
+# Read the internal cidr value from the YAML file using yq
+INTERNAL_IP_SUBNET=$(yq e '.user.cidr' "$YAML_FILE")
 
-echo "Domain ID:" $DOMAIN_ID
-echo "Project ID:" $PROJECT_ID
-echo "User ID:" $USER_ID
-echo
-# Check if the IDs are retrieved correctly
-#if [ -z "$DOMAIN_ID" ] || [ -z "$PROJECT_ID" ] || [ -z "$USER_ID" ] || [ -z "$ROLE_ID" ]; then
-#    echo "Failed to retrieve one or more IDs. Please check the names and ensure they exist."
-#    exit 1
-#fi
+# Check if INTERNAL_IP_SUBNET is empty
+if [ -z "$INTERNAL_IP_SUBNET" ]; then
+    echo "CIDR value is missing in $YAML_FILE"
+    exit 1
+fi
 
-# Assign the role to the user in the project
-echo "Assigning role $ROLE_ID to user $USER_ID in project $PROJECT_ID..."
-openstack role add --project "$PROJECT_ID" --user "$USER_ID" "$ROLE_ID"
+# Variables
+DOMAIN_NAME="weaver"
+DOMAIN_DESC="Weaver Labs Domain"
+PROJECT_NAME="weaver"
+PROJECT_DESC="Weaver Labs Project"
+ADMIN_USER="weaver"
+EXTERNAL_NETWORK_NAME="external-network"
+EXTERNAL_SUBNET_NAME="external-subnet"
+EXTERNAL_IP_SUBNET="$EXTERNAL_IP_SUBNET"
+INTERNAL_NETWORK_NAME="weaver-vpc-network"
+INTERNAL_SUBNET_NAME="weaver-vpc-subnet"
+INTERNAL_IP_SUBNET="$INTERNAL_IP_SUBNET"
+ROUTER_NAME="weaver-router"
+NEW_ROUTER_NAME="weaver"
 
-echo "Role assignment complete."
-echo
-echo "Setting network Names"
-openstack network set --name weaver-network demo-network
-openstack router set --name weaver-router demo-router
-echo "Completed.."
-echo
-echo "Domain configuration completed."
+# Rename the users domain
+echo "Renaming the users domain..."
+openstack domain set --name "$DOMAIN_NAME" --description "$DOMAIN_DESC" --enable users
+
+# Rename the demo project
+echo "Renaming the demo project..."
+openstack project set --name "$PROJECT_NAME" --description "$PROJECT_DESC" demo
+
+# Obtain the user ID of the weaver admin account
+USER_ID=$(openstack user list --domain "$DOMAIN_NAME" -f value -c ID -c Name | grep "$ADMIN_USER" | awk '{print $1}')
+
+# Add the admin role to the project and user
+echo "Adding the admin role to the user and project..."
+openstack role add --project "$PROJECT_NAME" --user "$USER_ID" admin
+
+# Rename the internal VPC network
+echo "Renaming the internal VPC network..."
+openstack network set --name "${INTERNAL_NETWORK_NAME}" demo-network
+
+# Rename the internal subnet
+echo "Renaming the internal subnet..."
+openstack subnet set --name "${INTERNAL_NETWORK_NAME}-${INTERNAL_IP_SUBNET}" demo-subnet
+
+# Rename the router
+echo "Renaming the router..."
+openstack router set --name "$NEW_ROUTER_NAME" demo-router
+
+# Share the external network
+echo "Sharing the external network..."
+openstack network set --share "$EXTERNAL_NETWORK_NAME"
+
+# Enable DHCP on the external subnet
+echo "Enabling DHCP on the external subnet..."
+openstack subnet set --dhcp "$EXTERNAL_SUBNET_NAME"
+
+# Set DNS servers for the external subnet
+echo "Setting DNS servers for the external subnet..."
+openstack subnet set --dns-nameserver 8.8.8.8 --dns-nameserver 1.1.1.1 "$EXTERNAL_SUBNET_NAME"
+
+# Rename the external subnet
+echo "Renaming the external subnet..."
+openstack subnet set --name "external-${EXTERNAL_IP_SUBNET}" "$EXTERNAL_SUBNET_NAME"
+
+echo "Domain Configuration completed successfully."
